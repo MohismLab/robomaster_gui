@@ -5,8 +5,11 @@ extends RefCounted
 ## The IMU yaw is ENU (from magnetic east, counter-clockwise). The UWB frame is
 ## rotated and mirrored against ENU, the same for every robot:
 ##     psi_uwb = theta + h * yaw_enu + delta[robot]
-## theta: UWB angle of magnetic east (shared), h: UWB handedness (-1 mirrored),
-## delta: small per-robot residual (IMU mounting / calibration error).
+## theta: UWB angle of magnetic east (shared reference, set by the first robot seen
+## moving), h: UWB handedness (-1 mirrored), delta: per-robot correction (IMU mounting,
+## e.g. the dogs' IMU sits differently, plus calibration error). A robot without its
+## own delta has no heading yet: it is measured once (calibration leg or the first
+## steady motion) and then refined on its own, never from the other robots.
 ##
 ## A magnetometer alone cannot tell where the UWB axes point, so theta comes from
 ## seeing a robot move (motion direction in UWB vs. its IMU yaw). Once known it is
@@ -14,7 +17,6 @@ extends RefCounted
 ## display frame and all headings right away.
 
 var path := "user://heading.cfg"   # demo mode uses its own file
-const K_THETA := 0.05      # [1/s] how fast the shared theta follows the robots
 
 var handedness := -1.0
 var theta = null           # float or null
@@ -59,30 +61,27 @@ func tick(dt: float) -> void:
 
 
 func psi(robot: String, yaw_enu: float) -> Variant:
-	if theta == null:
+	if theta == null or not delta.has(robot):
 		return null
-	return wrap_angle(theta + handedness * yaw_enu + delta.get(robot, 0.0))
+	return wrap_angle(theta + handedness * yaw_enu + delta[robot])
 
 
-## a measured UWB heading psi_obs of a robot whose IMU read yaw_enu
-## first: sets theta; afterwards: pulls delta[robot] (fast, gain k) and theta (slow)
+func knows(robot: String) -> bool:
+	return theta != null and delta.has(robot)
+
+
+## a measured UWB heading psi_obs of a robot whose IMU read yaw_enu: the first one
+## sets theta, a robot's first one sets its delta, later ones refine its delta (gain k)
 func observe(robot: String, psi_obs: float, yaw_enu: float, k: float, dt: float) -> void:
 	var t_obs := wrap_angle(psi_obs - handedness * yaw_enu)
 	if theta == null:
 		theta = t_obs
 		delta[robot] = 0.0
+	elif not delta.has(robot):
+		delta[robot] = wrap_angle(t_obs - theta)
 	else:
-		var e := wrap_angle(t_obs - theta - delta.get(robot, 0.0))
-		delta[robot] = wrap_angle(delta.get(robot, 0.0) + clampf(k * dt, 0.0, 1.0) * e)
-		# keep the residuals centred: move theta towards the mean of theta + delta
-		var m := 0.0
-		for r in delta:
-			m += delta[r]
-		m /= maxf(delta.size(), 1)
-		var step := clampf(K_THETA * dt, 0.0, 1.0) * m
-		theta = wrap_angle(theta + step)
-		for r in delta:
-			delta[r] -= step
+		var e := wrap_angle(t_obs - theta - delta[robot])
+		delta[robot] = wrap_angle(delta[robot] + clampf(k * dt, 0.0, 1.0) * e)
 	_dirty = true
 
 

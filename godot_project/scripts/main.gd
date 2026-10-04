@@ -10,7 +10,8 @@ extends Node3D
 ##   --display-anchors-topic ""  (optional other display frame, e.g. /uwb_viz/rm_0/anchors)
 ##   --spacing 0.5   --demo   --fullscreen
 ## Display frame: origin at A0, +x along A0 -> A1 (see ros_bridge.h).
-##   --drive-kinds rm         robot kinds driven with cmd_vel ("rm,dog", "all"); others view only
+##   --drive-kinds rm,dog     robot kinds driven with cmd_vel ("all"); others view only
+##   --cmd-domains dog=78     DDS domain of a kind's cmd_vel (Go2: go2_sport_bridge on domain 78)
 ##   --frame enu|axis display frame: ENU from the magnetometers (origin A0, x magnetic east,
 ##                    default, once the UWB<->ENU rotation is known) or A0 -> A1 as +x
 ##   --nav godot|ros  who drives to the goals: NavController here (cmd_vel, default)
@@ -37,7 +38,8 @@ var cfg := {
 	"autoplay": false,
 	"nav": "godot",
 	"frame": "enu",
-	"drive-kinds": "rm",
+	"drive-kinds": "rm,dog",
+	"cmd-domains": "dog=78",
 }
 
 var bridge: Node
@@ -202,6 +204,7 @@ func _start_bridge() -> void:
 			bridge.set("auto_discover", auto)
 			bridge.set("pose_topic_format", cfg["pose-topic"])
 			bridge.set("cmd_topic_format", cfg["cmd-topic"])
+			bridge.set("cmd_domains", cfg["cmd-domains"])
 			bridge.set("anchors_topic", cfg["anchors-topic"])
 			bridge.set("display_anchors_topic", cfg["display-anchors-topic"])
 			bridge.set("origin_anchor", int(cfg["origin-anchor"]))

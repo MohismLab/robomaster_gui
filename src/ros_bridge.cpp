@@ -73,6 +73,7 @@ void RosBridge::_bind_methods()
     RG_PROPERTY(frame_id, STRING);
     RG_PROPERTY(pose_topic_format, STRING);
     RG_PROPERTY(cmd_topic_format, STRING);
+    RG_PROPERTY(cmd_domains, STRING);
     RG_PROPERTY(raw_pose_topic_format, STRING);
     RG_PROPERTY(raw_timeout, FLOAT);
     RG_PROPERTY(imu_topic_format, STRING);
@@ -106,7 +107,13 @@ void RosBridge::add_robot(const std::string& r)
     Robot robot;
     robot.goal_pub = node_->create_publisher<geometry_msgs::msg::PoseStamped>("/uwb_nav/" + r + "/goal_pose", 10);
     robot.cancel_pub = node_->create_publisher<std_msgs::msg::Empty>("/uwb_nav/" + r + "/cancel", 10);
-    robot.cmd_pub = node_->create_publisher<geometry_msgs::msg::Twist>(format(cmd_topic_format_, r), 10);
+    int domain = cmd_domain_of(r);
+    auto cmd_node = domain >= 0 ? domain_node(domain) : node_;
+    robot.cmd_pub = cmd_node->create_publisher<geometry_msgs::msg::Twist>(format(cmd_topic_format_, r), 10);
+    if (domain >= 0)
+    {
+        RCLCPP_INFO(node_->get_logger(), "%s: cmd_vel on DDS domain %d", r.c_str(), domain);
+    }
     {
         std::lock_guard<std::mutex> lock(mutex_);
         state_[r] = robot;
@@ -190,6 +197,64 @@ void RosBridge::add_robot(const std::string& r)
         "/uwb_nav/" + r + "/markers", 10,
         [this, r](visualization_msgs::msg::MarkerArray::ConstSharedPtr msg) { on_nav_markers(r, *msg); }, sub_options_));
     RCLCPP_INFO(node_->get_logger(), "robot %s added", r.c_str());
+}
+
+int RosBridge::cmd_domain_of(const std::string& robot) const
+{
+    // kind prefix of "<prefix>_<id>"
+    std::string prefix = robot;
+    auto k = robot.rfind('_');
+    if (k != std::string::npos && k + 1 < robot.size() &&
+        std::all_of(robot.begin() + k + 1, robot.end(), [](char c) { return std::isdigit(static_cast<unsigned char>(c)); }))
+    {
+        prefix = robot.substr(0, k);
+    }
+    // "dog=78,fly=5"
+    std::string spec = to_std(cmd_domains_);
+    size_t pos = 0;
+    while (pos < spec.size())
+    {
+        size_t end = spec.find(',', pos);
+        std::string item = spec.substr(pos, end == std::string::npos ? std::string::npos : end - pos);
+        auto eq = item.find('=');
+        if (eq != std::string::npos && item.substr(0, eq) == prefix)
+        {
+            try
+            {
+                return std::stoi(item.substr(eq + 1));
+            }
+            catch (const std::exception&)
+            {
+                return -1;
+            }
+        }
+        if (end == std::string::npos)
+        {
+            break;
+        }
+        pos = end + 1;
+    }
+    return -1;
+}
+
+rclcpp::Node::SharedPtr RosBridge::domain_node(int domain)
+{
+    // called with subs_mutex_ held
+    auto it = domain_nodes_.find(domain);
+    if (it != domain_nodes_.end())
+    {
+        return it->second.second;
+    }
+    auto ctx = std::make_shared<rclcpp::Context>();
+    rclcpp::InitOptions opts;
+    opts.shutdown_on_signal = false;
+    opts.set_domain_id(static_cast<size_t>(domain));
+    ctx->init(0, nullptr, opts);
+    rclcpp::NodeOptions node_options;
+    node_options.context(ctx);
+    auto node = std::make_shared<rclcpp::Node>(to_std(node_name_) + "_d" + std::to_string(domain), node_options);
+    domain_nodes_[domain] = {ctx, node};
+    return node;
 }
 
 bool RosBridge::match(const String& fmt, const std::string& topic, std::string& robot)
@@ -317,6 +382,19 @@ void RosBridge::stop()
         subs_.clear();
         known_robots_.clear();
     }
+    {
+        std::lock_guard<std::mutex> lock(mutex_);
+        state_.clear();   // drops the publishers before their nodes go
+    }
+    for (auto& [domain, cn] : domain_nodes_)
+    {
+        cn.second.reset();
+        if (cn.first && cn.first->is_valid())
+        {
+            cn.first->shutdown("robomaster_gui stop");
+        }
+    }
+    domain_nodes_.clear();
     select_pub_.reset();
     {
         std::lock_guard<std::mutex> lock(mutex_);

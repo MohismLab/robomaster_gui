@@ -79,7 +79,8 @@ GDScript 每帧轮询 `RosBridge` 的最新状态（回调只在互斥锁内保�
 
 `NavController` 以 20 Hz 运行（`_physics_process`，与渲染帧率无关），全部在 UWB 坐标系中计算：
 
-- 航向 `ψ = θ + h·yaw_imu + δ_robot`（全局 θ + 每机小偏差 δ），优先使用 `heading_valid` 为真的 EKF 航向；
+- 航向 `ψ = θ + h·yaw_imu + δ_robot`（全局参考 θ + 每机独立修正 δ，IMU 安装方向不同的机器人如机器狗由 δ 吸收；
+  没有 δ 的机器人先测量一次），优先使用 `heading_valid` 为真的 EKF 航向；
   都没有时先沿车体 +x 行驶 0.25 m 标定。
 - 比例控制 + 限速 0.3 m/s + 限加速度 + 机器人间斥力避让，全向平移（wz = 0），世界速度按航向与手性换算为车体 `cmd_vel`。
 - 行驶 / 手动驾驶时持续比较“车体指令方向”与“UWB 观测运动方向”在线修正 θ、δ；偏差持续 > 100° 自动停车重新标定。
@@ -119,7 +120,8 @@ ros2 run robomaster_gui_node robomaster_gui --demo                       # 离�
 |---|---|---|
 | `robots` | `auto` | `auto`：有 `nlink_parser2/config/uwb_tags.yaml` 时用其中的 `tag_names`，否则按话题自动发现；或逗号列表 |
 | `tags_file` | 空 | UWB 标签映射文件（默认取 nlink_parser2 的 `config/uwb_tags.yaml`） |
-| `drive_kinds` | `rm` | 允许用 `cmd_vel` 驱动的机器人种类（如 `rm,dog`、`all`），其余只显示；确认控制接口后再开启 |
+| `drive_kinds` | `rm,dog` | 允许用 `cmd_vel` 驱动的机器人种类（`all` 为全部），其余只显示 |
+| `cmd_domains` | `dog=78` | 某类机器人 `cmd_vel` 所在的 DDS 域（Go2 的 go2_sport_bridge 在域 78），GUI 为其单独建 rclcpp context |
 | `pose_topic` | `/uwb_ekf/{}/pose` | `{}` = 机器人名 |
 | `cmd_topic` | `/{}/cmd_vel` | |
 | `anchors_topic` | `/uwb/anchors` | UWB 坐标系基站 |
@@ -165,6 +167,5 @@ images/               截图
 ## 已知限制
 
 - 无人机三维目标发布到 `/uwb_nav/<fly>/goal_pose`，需要无人机侧有节点执行。
-- 机器狗默认只显示（`drive_kinds` 不含 `dog`），其底盘控制接口确认后再开启。
 - θ 初值来自一次运动标定，可能有几度误差；机器人运动后自动修正。
 - Godot 4.5 RC 的独立渲染线程模式退出时会崩溃，因此未启用。

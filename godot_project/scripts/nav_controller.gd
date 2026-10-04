@@ -166,7 +166,7 @@ func _update_heading(s: Dictionary) -> void:
 	if s.get("has_orientation", false):
 		psi = s["uwb_yaw"]
 		heading_source = "EKF"
-	elif imu_ok and model.theta != null:
+	elif imu_ok and model.knows(robot):
 		psi = model.psi(robot, yaw_enu)
 		heading_source = "IMU"
 	elif psi_motion != null:
@@ -197,10 +197,14 @@ func _observe_motion(dt: float) -> Variant:
 		return err
 	if yaw_enu != null:
 		var first: bool = model.theta == null
+		var new_robot := not model.knows(robot)
 		model.observe(robot, psi_meas, yaw_enu, k_heading, dt)
 		if first:
 			_log.call("%s: magnetic frame locked from motion (UWB x-axis at %.1f° from east)" % [
 				robot, rad_to_deg(-model.handedness * model.theta)])
+		elif new_robot:
+			_log.call("%s: IMU heading measured from motion (correction %.1f°)" % [
+				robot, rad_to_deg(model.delta[robot])])
 	elif psi_motion != null:
 		psi_motion = wrap_angle(psi_motion + clampf(k_heading * dt, 0.0, 1.0) * err)
 	return err

@@ -20,7 +20,9 @@
 //                                               UWB-frame yaw; without it the orientation is ignored
 //   /uwb_nav/<robot>/goal_pose    PoseStamped   <- move orders (z: UWB height for flying robots)
 //   /uwb_nav/<robot>/cancel       Empty         <- stop orders
-//   /<robot>/cmd_vel              Twist         <- manual drive
+//   /<robot>/cmd_vel              Twist         <- navigation / manual drive; robots of a kind
+//                                               listed in cmd_domains ("dog=78") get it on that
+//                                               DDS domain (own rclcpp context)
 //   /uwb_nav/select               String        <- selection, keeps RViz/uwb_fleet in sync
 //
 // Display frame: origin at anchor origin_anchor (A0), z up from the floor (UWB z -
@@ -116,6 +118,8 @@ public:
     godot::String get_raw_pose_topic_format() const { return raw_pose_topic_format_; }
     void set_raw_timeout(double v) { raw_timeout_ = v; }
     double get_raw_timeout() const { return raw_timeout_; }
+    void set_cmd_domains(const godot::String& v) { cmd_domains_ = v; }
+    godot::String get_cmd_domains() const { return cmd_domains_; }
     void set_cmd_topic_format(const godot::String& v) { cmd_topic_format_ = v; }
     godot::String get_cmd_topic_format() const { return cmd_topic_format_; }
     void set_imu_topic_format(const godot::String& v) { imu_topic_format_ = v; }
@@ -182,6 +186,8 @@ private:
     static std::string format(const godot::String& fmt, const std::string& robot);
     static bool match(const godot::String& fmt, const std::string& topic, std::string& robot);
     void add_robot(const std::string& r);
+    int cmd_domain_of(const std::string& robot) const;
+    rclcpp::Node::SharedPtr domain_node(int domain);
     void discover();
     void on_pose(const std::string& robot, const geometry_msgs::msg::PoseStamped& msg);
     void on_nav_markers(const std::string& robot, const visualization_msgs::msg::MarkerArray& msg);
@@ -198,6 +204,7 @@ private:
     godot::String frame_id_ = "world";
     godot::String pose_topic_format_ = "/uwb_ekf/{}/pose";
     godot::String cmd_topic_format_ = "/{}/cmd_vel";
+    godot::String cmd_domains_ = "dog=78";
     godot::String raw_pose_topic_format_ = "/uwb/{}/pose";
     double raw_timeout_ = 1.0;
     godot::String imu_topic_format_ = "/{}/odometry/filtered";
@@ -221,6 +228,8 @@ private:
     rclcpp::TimerBase::SharedPtr discovery_timer_;
     rclcpp::CallbackGroup::SharedPtr discovery_group_;   // the node keeps only a weak_ptr
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr select_pub_;
+    // publish-only nodes on other DDS domains (cmd_vel of e.g. the Go2 dogs)
+    std::map<int, std::pair<rclcpp::Context::SharedPtr, rclcpp::Node::SharedPtr>> domain_nodes_;
 
     mutable std::mutex mutex_;
     std::map<std::string, Robot> state_;
