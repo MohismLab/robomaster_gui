@@ -752,6 +752,12 @@ func _on_unit_clicked(n: String, additive: bool) -> void:
 	_select([unit_by_name[n]], additive)
 
 
+func _toggle_labels() -> void:
+	RobotUnit.show_labels = not RobotUnit.show_labels
+	hud._buttons["labels"].set_pressed_no_signal(RobotUnit.show_labels)
+	hud.log_msg("robot labels " + ("ON" if RobotUnit.show_labels else "OFF"), RmUtil.TEXT_DIM)
+
+
 func _focus_selection() -> void:
 	var list := selection if not selection.is_empty() else units
 	var c := Vector3.ZERO
@@ -768,13 +774,14 @@ func _focus_selection() -> void:
 
 ## altitude < 0: flying robots keep their height
 func _order_move(target: Vector3, altitude := -1.0) -> void:
-	var robots := selection.filter(func(u): return u.is_online() and (u.can_drive() or u.can_fly()))
+	# a robot in its magnetometer calibration is left alone (an order's cancel would abort it)
+	var robots := selection.filter(func(u): return u.is_online() and not u.calibrating and (u.can_drive() or u.can_fly()))
 	if robots.size() < selection.size():
 		var skipped := PackedStringArray()
 		for u in selection:
 			if not u in robots:
 				skipped.append(u.robot_name)
-		hud.log_msg("not driven (offline / no floor navigation): " + ", ".join(skipped), RmUtil.ORANGE)
+		hud.log_msg("not driven (offline / calibrating / no floor navigation): " + ", ".join(skipped), RmUtil.ORANGE)
 	if robots.is_empty():
 		hud.toast("NO UNIT SELECTED // 未选择单位", RmUtil.ORANGE)
 		glitch(0.3)
@@ -869,7 +876,7 @@ func _set_manual(v: bool) -> void:
 	targeting = false
 	for u in units:
 		var m := v and u.selected
-		if m and not u.manual:
+		if m and not u.manual and not u.calibrating:
 			navs[u.robot_name].stop()
 			bridge.cancel_goal(u.robot_name)
 			u.clear_order()
@@ -906,7 +913,7 @@ func _update_manual(delta: float) -> void:
 		_manual_t = 1.0 / MANUAL_RATE
 		var v := Vector2(vx, vy).normalized() * MANUAL_SPEED * boost
 		for u in selection:
-			if not u.can_drive():
+			if not u.can_drive() or u.calibrating:
 				continue
 			bridge.send_cmd_vel(u.robot_name, v.x, v.y, wz * MANUAL_TURN * boost)
 			navs[u.robot_name].note_body_cmd(v.x, v.y, wz * MANUAL_TURN * boost)
@@ -934,6 +941,8 @@ func _on_command(cmd: String) -> void:
 			_select(units)
 		"help":
 			hud.toggle_help()
+		"labels":
+			_toggle_labels()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -1058,6 +1067,8 @@ func _on_key(k: InputEventKey) -> void:
 			hud.log_msg("navigation: " + _nav_name(), RmUtil.LIME)
 			hud.toast("NAV ▸ " + _nav_name(), RmUtil.LIME)
 			glitch(0.3)
+		KEY_L:
+			_toggle_labels()
 		KEY_C:
 			# forget the heading of the selection, next order recalibrates
 			for u in selection:

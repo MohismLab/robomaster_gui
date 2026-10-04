@@ -31,6 +31,10 @@ var speed := 0.0
 var manual := false
 var height := 0.0                 # raw UWB height above the floor (flying robots)
 var drive_allowed := true
+var calibrating := false          # magnetometer calibration spinning the robot: no orders
+
+## name / status text above the robots (HUD toggle "LABELS", key L), off by default
+static var show_labels := false
 
 var _target := Vector3.ZERO
 var _vel := Vector3.ZERO
@@ -278,6 +282,7 @@ func _build_world_fx() -> void:
 ## per-frame update from the ROS state dictionary (RosBridge.get_robot_states()[name])
 func apply_state(s: Dictionary) -> void:
 	age = s.get("age", 1e9)
+	calibrating = s.get("calibrating", false)
 	height = s.get("height", 0.0)
 	status = s.get("status", "")
 	var hp: bool = s.get("has_pose", false)
@@ -382,9 +387,14 @@ func _process(delta: float) -> void:
 	_trail.emitting = speed > 0.02
 
 	_label.modulate = c.lightened(0.25) if (selected or hovered) else Color(c, 0.75)
+	_label.visible = show_labels
+	_sub_label.visible = show_labels
 	if lost:
 		_sub_label.text = "⚠ SIGNAL LOST %.1fs" % age
 		_sub_label.modulate = RmUtil.ORANGE
+	elif calibrating:
+		_sub_label.text = "⟳ MAG CALIBRATION"
+		_sub_label.modulate = RmUtil.YELLOW
 	elif manual:
 		_sub_label.text = "◈ MANUAL"
 		_sub_label.modulate = RmUtil.YELLOW

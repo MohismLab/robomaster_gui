@@ -156,6 +156,18 @@ void RosBridge::add_robot(const std::string& r)
             },
             sub_options_));
         subs_.push_back(node_->create_subscription<std_msgs::msg::String>(
+            "/" + r + "/imu/flat_calib/status", rclcpp::QoS(1).reliable().transient_local(),
+            [this, r](std_msgs::msg::String::ConstSharedPtr msg) {
+                std::lock_guard<std::mutex> lock(mutex_);
+                auto it = state_.find(r);
+                if (it != state_.end())
+                {
+                    it->second.calib_status = msg->data;
+                    it->second.calib_stamp = Clock::now();
+                }
+            },
+            sub_options_));
+        subs_.push_back(node_->create_subscription<std_msgs::msg::String>(
             "/" + r + "/imu/mag_state", 10,
             [this, r](std_msgs::msg::String::ConstSharedPtr msg) {
                 std::lock_guard<std::mutex> lock(mutex_);
@@ -733,6 +745,10 @@ Dictionary RosBridge::get_robot_states() const
         d["imu_yaw"] = r.imu_yaw;
         d["imu_age"] = r.has_imu ? seconds_since(r.imu_stamp) : 1e9;
         d["mag_state"] = String::utf8(r.mag_state.c_str());
+        // the calibration republishes about every second; a stale latched "calibrating"
+        // (calibration process killed) expires after 3 s
+        d["calib_status"] = String::utf8(r.calib_status.c_str());
+        d["calibrating"] = r.calib_status.rfind("校准中", 0) == 0 && seconds_since(r.calib_stamp) < 3.0;
         out[String::utf8(name.c_str())] = d;
     }
     return out;

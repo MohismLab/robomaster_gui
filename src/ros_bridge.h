@@ -16,6 +16,8 @@
 //   /uwb_nav/<robot>/markers      MarkerArray   nav goal + status text (uwb_goal_nav.py)
 //   /<robot>/odometry/filtered    Odometry      car IMU yaw (ENU, from magnetic east; imu_topic_format)
 //   /<robot>/imu/mag_state        String        LOCKED / HOLD / REJECTED
+//   /<robot>/imu/flat_calib/status String (latched) magnetometer calibration; "校准中..." while
+//                                               the robot spins on its own (no orders then)
 //   /uwb_ekf/<robot>/heading_valid Bool (latched) the pose orientation carries a real
 //                                               UWB-frame yaw; without it the orientation is ignored
 //   /uwb_nav/<robot>/goal_pose    PoseStamped   <- move orders (z: UWB height for flying robots)
@@ -161,6 +163,8 @@ private:
         double imu_yaw = 0;
         Clock::time_point imu_stamp;
         std::string mag_state;
+        std::string calib_status;
+        Clock::time_point calib_stamp;
         bool has_goal = false;
         double gx = 0, gy = 0;
         std::string status;

@@ -201,6 +201,9 @@ class UnitCard extends Control:
 			if not ok:
 				state = "SIGNAL LOST %.1fs" % unit.age
 				state_col = RmUtil.ORANGE
+			elif unit.calibrating:
+				state = "CALIBRATING 地磁校准中"
+				state_col = RmUtil.YELLOW
 			elif unit.manual:
 				state = "MANUAL 手动"
 				state_col = RmUtil.YELLOW
@@ -463,7 +466,7 @@ func _build_bottom() -> void:
 	p.add_child(_manual_label)
 
 	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 10)
+	row.add_theme_constant_override("separation", 8)
 	row.position = Vector2(20, 110)
 	p.add_child(row)
 	var defs := [
@@ -471,7 +474,8 @@ func _build_bottom() -> void:
 		["stop", "■ STOP 停止 [SPACE]", RmUtil.MAGENTA],
 		["manual", "◈ MANUAL 手动 [M]", RmUtil.YELLOW],
 		["focus", "◎ FOCUS 聚焦 [F]", RmUtil.LIME],
-		["all", "▣ ALL 全选 [CTRL+A]", RmUtil.PURPLE],
+		["all", "▣ ALL 全选 [^A]", RmUtil.PURPLE],
+		["labels", "◇ LABELS 标签 [L]", RmUtil.CYAN],
 		["help", "? HELP [F1]", RmUtil.TEXT_DIM],
 	]
 	for d in defs:
@@ -481,6 +485,7 @@ func _build_bottom() -> void:
 		b.custom_minimum_size = Vector2(0, 44)
 		_theme_button(b, d[2])
 		var cmd: String = d[0]
+		b.toggle_mode = cmd == "labels"
 		b.pressed.connect(func(): command.emit(cmd))
 		row.add_child(b)
 		_buttons[cmd] = b
@@ -531,6 +536,7 @@ func _build_help() -> void:
     Space / X                  停止 (取消导航 + 零速)
     N                          导航: Godot(cmd_vel) / ROS(uwb_goal_nav)
     C                          重新标定所选单位航向
+    L                          显示/隐藏机器人头顶文字
     M                          手动驾驶模式 开/关
       I K / J L / U O          前后 / 左右平移 / 旋转
       Shift                    加速

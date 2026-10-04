@@ -104,6 +104,16 @@ func stop(reason := "") -> void:
 
 
 ## forget this robot's heading correction; the next order drives the calibration leg
+## leave the robot to someone else (its magnetometer calibration): stop following the
+## goal without sending anything, the zero twists would fight the calibration spin
+func abort_silent(reason := "") -> void:
+	state = IDLE
+	goal = null
+	_last_v = 0.0
+	_stop_burst = 0
+	status = reason
+
+
 func reset_heading() -> void:
 	model.reset(robot)
 	psi_motion = null
@@ -226,6 +236,12 @@ func tick(s: Dictionary, dt: float, others: Array) -> void:
 		_hist.pop_front()
 	_update_heading(s)
 	var fresh: bool = s.get("age", 1e9) < pose_timeout
+
+	if s.get("calibrating", false):
+		if state != IDLE:
+			abort_silent("MAG CALIB")
+			_log.call("%s: magnetometer calibration running, navigation dropped" % robot)
+		return
 
 	var err = null
 	if state != CALIB:
