@@ -147,6 +147,11 @@ func _perf_probe() -> void:
 				RenderingServer.viewport_get_measured_render_time_gpu(rid),
 				Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
 				Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME)])
+		var hs := PackedStringArray()
+		for n in navs:
+			var nv: NavController = navs[n]
+			hs.append("%s:%s%s" % [n, nv.heading_source, (" %.1f°" % rad_to_deg(nv.psi)) if nv.psi != null else ""])
+		print("PROF heading ", " ".join(hs))
 
 
 func _autoplay() -> void:

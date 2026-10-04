@@ -61,6 +61,8 @@ var _calib_start := Vector2.ZERO
 var _phase_t := 0.0
 var _imu_sum := Vector2.ZERO
 var _imu_spoiled := false
+var _ekf_err := Vector2.ZERO  # EKF heading vs. observed motion, summed while driving steadily
+var _ekf_err_n := 0
 var _cmd := Vector3.ZERO    # last body command (vx, vy, wz)
 var _cmd_t := -10.0
 var _cmd_since := 0.0       # time the body command direction last changed
@@ -212,6 +214,16 @@ func _observe_motion(dt: float) -> Variant:
 		if absf(err) > deg_to_rad(60.0):
 			return err   # far off: let the caller decide (mirror guard), do not learn from it
 	if heading_source == "EKF":
+		# the EKF heading is used as is; report how well it matches the motion (cross-check of
+		# the adapter's heading_offset), every ~5 s of steady driving
+		if err != null:
+			_ekf_err += Vector2.from_angle(err)
+			_ekf_err_n += 1
+			if _ekf_err_n >= 100:
+				_log.call("%s: EKF heading vs. motion: %+.1f° (mean over %d samples)" % [
+					robot, rad_to_deg(_ekf_err.angle()), _ekf_err_n])
+				_ekf_err = Vector2.ZERO
+				_ekf_err_n = 0
 		return err
 	if yaw_enu != null and not mag_ok:
 		return err   # gyro-only IMU yaw: use it, but do not learn from it
