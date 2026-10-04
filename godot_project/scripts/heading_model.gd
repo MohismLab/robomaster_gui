@@ -70,15 +70,35 @@ func knows(robot: String) -> bool:
 	return theta != null and delta.has(robot)
 
 
-## a measured UWB heading psi_obs of a robot whose IMU read yaw_enu: the first one
-## sets theta, a robot's first one sets its delta, later ones refine its delta (gain k)
+## minimum consistent measurements before a robot's (or the first) correction is taken
+const INIT_SAMPLES := 30          # 1.5 s at 20 Hz
+const INIT_SPREAD := 0.97         # mean resultant length: |sum of unit vectors| / n
+var _pending := {}                # robot -> [Vector2 sum, n]
+
+
+## a measured UWB heading psi_obs of a robot whose IMU read yaw_enu. A robot without a
+## correction (and theta itself) is initialised only from INIT_SAMPLES consistent
+## measurements in a row - one look at a robot that does not move as commanded must not
+## set it; later measurements refine its delta (gain k)
 func observe(robot: String, psi_obs: float, yaw_enu: float, k: float, dt: float) -> void:
 	var t_obs := wrap_angle(psi_obs - handedness * yaw_enu)
-	if theta == null:
-		theta = t_obs
-		delta[robot] = 0.0
-	elif not delta.has(robot):
-		delta[robot] = wrap_angle(t_obs - theta)
+	if theta == null or not delta.has(robot):
+		var p: Array = _pending.get(robot, [Vector2.ZERO, 0])
+		var mean: Vector2 = p[0] / maxi(p[1], 1)
+		if p[1] > 0 and mean.dot(Vector2.from_angle(t_obs)) < cos(deg_to_rad(20.0)):
+			p = [Vector2.ZERO, 0]   # inconsistent: start over
+		p[0] += Vector2.from_angle(t_obs)
+		p[1] += 1
+		_pending[robot] = p
+		if p[1] < INIT_SAMPLES or p[0].length() / p[1] < INIT_SPREAD:
+			return
+		_pending.erase(robot)
+		var t_init: float = p[0].angle()
+		if theta == null:
+			theta = t_init
+			delta[robot] = 0.0
+		else:
+			delta[robot] = wrap_angle(t_init - theta)
 	else:
 		var e := wrap_angle(t_obs - theta - delta[robot])
 		delta[robot] = wrap_angle(delta[robot] + clampf(k * dt, 0.0, 1.0) * e)
