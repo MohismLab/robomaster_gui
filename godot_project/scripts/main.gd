@@ -507,6 +507,10 @@ func _process(delta: float) -> void:
 					var a: Vector2 = bridge.to_display_xy(p)
 					var b: Vector2 = bridge.to_display_xy(p + Vector2.from_angle(nav.psi))
 					s["yaw"] = (b - a).angle()
+				elif not s.get("has_orientation", false):
+					# no heading right now (IMU message gap, not calibrated yet): keep the last one
+					# instead of the meaningless identity orientation of the EKF pose
+					s.erase("yaw")
 				if nav_backend == "godot":
 					s["has_goal"] = nav.has_goal()
 					if nav.goal != null:

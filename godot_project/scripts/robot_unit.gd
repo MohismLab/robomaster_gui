@@ -291,7 +291,8 @@ func apply_state(s: Dictionary) -> void:
 		var t := RmUtil.ros_to_godot(Vector3(ros_position.x, ros_position.y, 0.0))
 		var jumped := has_pose and t.distance_to(_target) > JUMP
 		_target = t
-		yaw = s.get("yaw", 0.0)
+		if s.has("yaw"):
+			yaw = s["yaw"]
 		var ok := age < SIGNAL_TIMEOUT
 		if not has_pose or jumped or (ok and not _was_ok):
 			# first pose, relocation (tag rebooted, EKF reset) or signal back: no slide,
@@ -356,7 +357,8 @@ func _process(delta: float) -> void:
 	_fx.visible = true
 	var prev := position
 	position = position.lerp(_target, 1.0 - exp(-10.0 * delta))
-	rotation.y = lerp_angle(rotation.y, yaw, 1.0 - exp(-10.0 * delta))
+	# heading eased (IMU yaw steps when a magnetometer re-locks become a quick turn)
+	rotation.y = lerp_angle(rotation.y, yaw, 1.0 - exp(-4.0 * delta))
 	if delta > 0.0:
 		_vel = _vel.lerp((position - prev) / delta, 1.0 - exp(-6.0 * delta))
 	if not signal_ok():
