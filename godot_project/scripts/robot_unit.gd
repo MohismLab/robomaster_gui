@@ -6,7 +6,7 @@ extends Node3D
 ## trail, labels, path ribbon, navigation goal).
 ##
 ## A robot kind subclasses it and implements _build_body() (the model under _body,
-## x forward, y up, floor at y = 0); optional overrides: _animate(), can_drive(),
+## x forward, y up, floor at y = 0); optional overrides: _animate(), kind_can_drive(), can_fly(),
 ## kind_tag(), hover_height(), ring_size(), label_height(). Kinds are mapped to robot
 ## names in RobotRegistry.
 
@@ -30,6 +30,7 @@ var yaw := 0.0
 var speed := 0.0
 var manual := false
 var height := 0.0                 # raw UWB height above the floor (flying robots)
+var drive_allowed := true
 
 var _target := Vector3.ZERO
 var _vel := Vector3.ZERO
@@ -80,8 +81,14 @@ func _animate(_delta: float) -> void:
 	pass
 
 
-## can it be driven on the floor with /<robot>/cmd_vel (navigation, manual drive)?
+## driven with /<robot>/cmd_vel (navigation, manual drive)? the kind must support it
+## and it must be enabled (--drive-kinds, off until a robot's control interface is known)
 func can_drive() -> bool:
+	return drive_allowed and kind_can_drive()
+
+
+## the kind moves on the floor and takes a body twist on cmd_vel
+func kind_can_drive() -> bool:
 	return true
 
 

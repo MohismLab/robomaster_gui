@@ -117,7 +117,9 @@ ros2 run robomaster_gui_node robomaster_gui --demo                       # 离�
 
 | launch 参数 | 默认 | 说明 |
 |---|---|---|
-| `robots` | `auto` | `auto` 自动发现；或逗号列表，只显示这些 |
+| `robots` | `auto` | `auto`：有 `nlink_parser2/config/uwb_tags.yaml` 时用其中的 `tag_names`，否则按话题自动发现；或逗号列表 |
+| `tags_file` | 空 | UWB 标签映射文件（默认取 nlink_parser2 的 `config/uwb_tags.yaml`） |
+| `drive_kinds` | `rm` | 允许用 `cmd_vel` 驱动的机器人种类（如 `rm,dog`、`all`），其余只显示；确认控制接口后再开启 |
 | `pose_topic` | `/uwb_ekf/{}/pose` | `{}` = 机器人名 |
 | `cmd_topic` | `/{}/cmd_vel` | |
 | `anchors_topic` | `/uwb/anchors` | UWB 坐标系基站 |
@@ -145,7 +147,7 @@ GUI 参数（`--` 之后）：`--frame enu|axis`、`--nav godot|ros`、`--demo`�
 ## 新增机器人种类
 
 1. 新建 `godot_project/scripts/xxx_unit.gd`：`extends RobotUnit`，实现 `_build_body()`（模型挂到 `_body` 下，x 前 y 上，地面 y = 0），
-   按需重写 `_animate()`、`can_drive()`、`can_fly()`、`kind_tag()`、`hover_height()`、`ring_size()`、`label_height()`。
+   按需重写 `_animate()`、`kind_can_drive()`、`can_fly()`、`kind_tag()`、`hover_height()`、`ring_size()`、`label_height()`。
 2. 在 `robot_registry.gd` 的 `KINDS`（及 `HUES`）中加一行前缀映射，例如 `"car": preload("res://scripts/car_unit.gd")`。
 
 模型网格放在 `godot_project/assets/models/`。STL/OBJ 可用 `tools/decimate_obj.py` 转换与减面（Godot 不支持 STL）。
@@ -163,5 +165,6 @@ images/               截图
 ## 已知限制
 
 - 无人机三维目标发布到 `/uwb_nav/<fly>/goal_pose`，需要无人机侧有节点执行。
+- 机器狗默认只显示（`drive_kinds` 不含 `dog`），其底盘控制接口确认后再开启。
 - θ 初值来自一次运动标定，可能有几度误差；机器人运动后自动修正。
 - Godot 4.5 RC 的独立渲染线程模式退出时会崩溃，因此未启用。

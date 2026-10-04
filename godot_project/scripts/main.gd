@@ -10,6 +10,7 @@ extends Node3D
 ##   --display-anchors-topic ""  (optional other display frame, e.g. /uwb_viz/rm_0/anchors)
 ##   --spacing 0.5   --demo   --fullscreen
 ## Display frame: origin at A0, +x along A0 -> A1 (see ros_bridge.h).
+##   --drive-kinds rm         robot kinds driven with cmd_vel ("rm,dog", "all"); others view only
 ##   --frame enu|axis display frame: ENU from the magnetometers (origin A0, x magnetic east,
 ##                    default, once the UWB<->ENU rotation is known) or A0 -> A1 as +x
 ##   --nav godot|ros  who drives to the goals: NavController here (cmd_vel, default)
@@ -36,6 +37,7 @@ var cfg := {
 	"autoplay": false,
 	"nav": "godot",
 	"frame": "enu",
+	"drive-kinds": "rm",
 }
 
 var bridge: Node
@@ -243,6 +245,8 @@ func _ensure_units(states: Dictionary) -> void:
 		var u := RobotRegistry.create(name)
 		add_child(u)
 		u.setup(name, units.size())
+		var kinds: PackedStringArray = cfg["drive-kinds"].split(",", false)
+		u.drive_allowed = demo or "all" in kinds or RobotRegistry.prefix_of(name) in kinds
 		units.append(u)
 		unit_by_name[name] = u
 		navs[name] = NavController.new(name, bridge, heading, _nav_log)

@@ -33,7 +33,7 @@ func kind_tag() -> String:
 	return "FLY"
 
 
-func can_drive() -> bool:
+func kind_can_drive() -> bool:
 	return false
 
 
