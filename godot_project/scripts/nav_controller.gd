@@ -10,7 +10,9 @@ extends RefCounted
 ##   3. a motion calibration alone (no IMU), valid as long as the robot does not turn
 ## Whenever the robot moves under a known, steady body command (navigation or manual
 ## drive) the motion direction seen by UWB is compared with the command, which
-## learns / refines the HeadingModel. Without any heading yet, an order first drives
+## learns / refines the HeadingModel - only while the magnetometer is LOCKED
+## (/<robot>/imu/mag_state): when it is rejected the IMU yaw is gyro-only and drifts
+## (~0.3 deg/s seen on the Go2), so nothing is learned from it then. Without any heading yet, an order first drives
 ## calib_dist along body +x.
 ##
 ## Body frame (cmd_vel): x forward, y left. Body +y points to psi + h * 90 deg in the
@@ -41,6 +43,7 @@ var goal = null             # Vector2, UWB frame
 var pos := Vector2.ZERO     # UWB frame
 var psi = null              # float or null, UWB frame
 var yaw_enu = null          # latest IMU yaw (ENU) or null
+var mag_ok := true          # magnetometer LOCKED (or the robot reports no mag_state)
 var heading_source := "-"
 var status := ""
 var psi_motion = null       # heading from a calibration without IMU
@@ -57,6 +60,7 @@ var _calib_phase := 0       # 0 settle, 1 drive, 2 settle at the end
 var _calib_start := Vector2.ZERO
 var _phase_t := 0.0
 var _imu_sum := Vector2.ZERO
+var _imu_spoiled := false
 var _cmd := Vector3.ZERO    # last body command (vx, vy, wz)
 var _cmd_t := -10.0
 var _cmd_since := 0.0       # time the body command direction last changed
@@ -145,6 +149,7 @@ func _start_calibration() -> void:
 	_calib_phase = 0
 	_phase_t = _now
 	_imu_sum = Vector2.ZERO
+	_imu_spoiled = false
 	_log.call("%s: no heading yet, driving %.2f m along body +x" % [robot, calib_dist])
 
 
@@ -173,6 +178,8 @@ func _velocity() -> Variant:
 func _update_heading(s: Dictionary) -> void:
 	var imu_ok: bool = s.get("has_imu", false) and s.get("imu_age", 1e9) < imu_timeout
 	yaw_enu = s["imu_yaw"] if imu_ok else null
+	var ms: String = s.get("mag_state", "")
+	mag_ok = ms == "" or ms == "LOCKED"
 	if s.get("has_orientation", false):
 		psi = s["uwb_yaw"]
 		heading_source = "EKF"
@@ -205,6 +212,8 @@ func _observe_motion(dt: float) -> Variant:
 			return err   # far off: let the caller decide (mirror guard), do not learn from it
 	if heading_source == "EKF":
 		return err
+	if yaw_enu != null and not mag_ok:
+		return err   # gyro-only IMU yaw: use it, but do not learn from it
 	if yaw_enu != null:
 		var first: bool = model.theta == null
 		var new_robot := not model.knows(robot)
@@ -268,8 +277,11 @@ func _calibrate(s: Dictionary) -> void:
 				_calib_start = _mean_pos(settle_time * 0.8)
 				_calib_phase = 1
 		1:
-			if yaw_enu != null:
+			if yaw_enu != null and mag_ok:
 				_imu_sum += Vector2.from_angle(yaw_enu)
+			elif not mag_ok:
+				_imu_sum = Vector2.ZERO   # magnetometer dropped out: this leg can not calibrate the IMU
+				_imu_spoiled = true
 			if _mean_pos(0.25).distance_to(_calib_start) < calib_dist:
 				_send(calib_speed, 0.0, 0.0)
 			else:
@@ -280,14 +292,16 @@ func _calibrate(s: Dictionary) -> void:
 			if _now - _phase_t < settle_time:
 				return
 			var psi_obs := (_mean_pos(settle_time * 0.8) - _calib_start).angle()
-			if yaw_enu != null and _imu_sum != Vector2.ZERO:
+			if yaw_enu != null and _imu_sum != Vector2.ZERO and not _imu_spoiled:
 				model.calibrate(robot, psi_obs, _imu_sum.angle())
 				psi_motion = null
 				_log.call("%s: calibrated, body x at %.1f° in UWB (UWB x-axis at %.1f° from east)" % [
 					robot, rad_to_deg(psi_obs), rad_to_deg(-model.handedness * model.theta)])
 			else:
 				psi_motion = psi_obs
-				_log.call("%s: calibrated, body x at %.1f° (no IMU, do not rotate)" % [robot, rad_to_deg(psi_obs)])
+				var why := "magnetometer not locked" if _imu_spoiled else "no IMU"
+				_log.call("%s: calibrated, body x at %.1f° (%s: motion heading only, do not rotate)" % [
+					robot, rad_to_deg(psi_obs), why])
 			_force_calib = false
 			_update_heading(s)
 			state = GOING if goal != null else IDLE
