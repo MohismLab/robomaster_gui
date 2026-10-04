@@ -102,6 +102,8 @@ func _ready() -> void:
 
 	_start_bridge()
 	nav_backend = cfg["nav"]
+	if demo:
+		heading.path = "user://heading_demo.cfg"   # the simulated frame must not touch the real one
 	if heading.load_saved():
 		hud.log_msg("heading: saved UWB x-axis at %.1f° from magnetic east" % rad_to_deg(-heading.handedness * heading.theta), RmUtil.PURPLE)
 	else:

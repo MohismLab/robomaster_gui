@@ -13,7 +13,7 @@ extends RefCounted
 ## saved to user://heading.cfg and loaded at the next start, which gives the ENU
 ## display frame and all headings right away.
 
-const PATH := "user://heading.cfg"
+var path := "user://heading.cfg"   # demo mode uses its own file
 const K_THETA := 0.05      # [1/s] how fast the shared theta follows the robots
 
 var handedness := -1.0
@@ -29,7 +29,7 @@ static func wrap_angle(a: float) -> float:
 
 func load_saved() -> bool:
 	var cfg := ConfigFile.new()
-	if cfg.load(PATH) != OK:
+	if cfg.load(path) != OK:
 		return false
 	if cfg.get_value("frame", "handedness", handedness) != handedness:
 		return false   # saved for another handedness, ignore
@@ -46,7 +46,7 @@ func save() -> void:
 	cfg.set_value("frame", "theta", theta)
 	cfg.set_value("frame", "delta", delta)
 	cfg.set_value("frame", "saved", Time.get_datetime_string_from_system())
-	cfg.save(PATH)
+	cfg.save(path)
 	_dirty = false
 
 
