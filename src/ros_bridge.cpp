@@ -191,6 +191,7 @@ void RosBridge::add_robot(const std::string& r)
                     it->second.invalid_stamp = Clock::now();
                 }
                 it->second.pose_valid = msg->data;
+                it->second.pose_valid_seen = true;
             }
         },
         sub_options_));
@@ -441,8 +442,8 @@ void RosBridge::on_pose(const std::string& robot, const geometry_msgs::msg::Pose
     }
     Robot& r = it->second;
     // tag silent (power loss): the EKF only extrapolates, keep the last trusted pose
-    if (!r.pose_valid ||
-        (!raw_pose_topic_format_.is_empty() && (!r.has_raw || seconds_since(r.raw_stamp) > raw_timeout_)))
+    if (!r.pose_valid || (!r.pose_valid_seen && !raw_pose_topic_format_.is_empty() &&
+                          (!r.has_raw || seconds_since(r.raw_stamp) > raw_timeout_)))
     {
         return;
     }
@@ -719,7 +720,7 @@ Dictionary RosBridge::get_robot_states() const
         d["yaw"] = yaw_to_display(r.yaw);
         // signal age: the older of the EKF pose and the raw UWB pose
         double age = r.has_pose ? seconds_since(r.stamp) : 1e9;
-        if (!raw_pose_topic_format_.is_empty())
+        if (!raw_pose_topic_format_.is_empty() && !r.pose_valid_seen)
         {
             age = std::max(age, r.has_raw ? seconds_since(r.raw_stamp) : 1e9);
         }

@@ -9,7 +9,9 @@
 //                                               tag goes silent (power loss), so EKF poses are ignored
 //                                               while the raw pose is older than raw_timeout.
 //   /uwb_ekf/<robot>/pose_valid   Bool (latched) false while the tag is silent (uwb_ekf_adapter);
-//                                               EKF poses are ignored then as well
+//                                               EKF poses are ignored then as well. Once it has been
+//                                               received, the raw-pose gating is off (the adapter may
+//                                               bridge short raw gaps, e.g. dogs with odometry fusion)
 //   /uwb/anchors                  MarkerArray   anchor positions, UWB frame (linktrack_node)
 //   display_anchors_topic         MarkerArray   optional: the same anchors in another frame
 //                                               (e.g. /uwb_viz/rm_0/anchors of uwb_mocap_viz.py)
@@ -153,6 +155,7 @@ private:
         double x = 0, y = 0, z = 0, yaw = 0;
         bool heading_valid = false;     // /uwb_ekf/<robot>/heading_valid: the pose yaw is real
         bool pose_valid = true;
+        bool pose_valid_seen = false;   // the adapter tells validity itself: no raw-pose gating
         Clock::time_point invalid_stamp;
         bool has_raw = false;
         double raw_z = 0;               // raw UWB z (height for flying robots)
