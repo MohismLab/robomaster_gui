@@ -56,8 +56,8 @@ GDScript 每帧轮询 `RosBridge` 的最新状态（回调只在互斥锁内保�
 | `/uwb_ekf/<robot>/pose` | PoseStamped | 订阅 | 位置（UWB 坐标系，`frame_id: world`），可用 `pose_topic` 改 |
 | `/uwb/<robot>/pose` | PoseStamped | 订阅 | 原始 UWB：判断标签是否在线、无人机高度 |
 | `/uwb_ekf/<robot>/pose_valid` | Bool (latched) | 订阅 | false 时忽略 EKF 位姿（标签掉电） |
-| `/uwb_ekf/<robot>/heading_valid` | Bool (latched) | 订阅 | true 时 pose 的 orientation 为 UWB 系真实航向 |
-| `/<robot>/odometry/filtered` | Odometry | 订阅 | IMU 航向 yaw（ENU，从磁东逆时针） |
+| `/uwb_ekf/<robot>/heading_valid` | Bool (latched) | 订阅 | true 时 pose 的 orientation 为 UWB 系航向（机体 +x，cmd_vel 坐标系），GUI 优先使用 |
+| `/<robot>/odometry/filtered` | Odometry | 订阅 | IMU 航向 yaw（ENU，从磁东逆时针），EKF 无航向时 GUI 自己换算 |
 | `/<robot>/imu/mag_state` | String | 订阅 | 地磁状态 LOCKED / HOLD / REJECTED |
 | `/uwb/anchors` | MarkerArray | 订阅 | 基站坐标（UWB 坐标系，linktrack_node） |
 | `/uwb_nav/<robot>/markers` | MarkerArray | 订阅 | ROS 导航（uwb_goal_nav.py）的目标与状态 |
@@ -75,13 +75,19 @@ GDScript 每帧轮询 `RosBridge` 的最新状态（回调只在互斥锁内保�
   （`~/.local/share/godot/app_userdata/RoboMaster Tactical Net/`），下次启动直接使用；尚未知道 θ 时以 A0→A1 为 +x。
 - 下达的目标点在 C++ 中反变换回 UWB 坐标系后再发布，导航与 `uwb_goal_nav.py` 始终工作在 UWB 坐标系。
 
+## 订阅机器人的位置与航向（其他节点）
+
+`/uwb_ekf/<robot>/pose`（PoseStamped，UWB 世界坐标系）同时给出位置与航向：
+`position.x/y` 为位置；`/uwb_ekf/<robot>/heading_valid` 为 true 时，`orientation` 的 yaw 是机体 +x（cmd_vel 坐标系）
+在 UWB 世界坐标系中的朝向（`ψ = heading_offset − yaw_imu`，由 uwb_ekf_adapter 换算），为 false 时是单位四元数。
+`/uwb_ekf/<robot>/pose_valid` 为 false 时不发布位置；速度见 `/uwb_ekf/<robot>/odometry/filtered` 的 twist。
+
 ## 导航（Godot 端）
 
 `NavController` 以 20 Hz 运行（`_physics_process`，与渲染帧率无关），全部在 UWB 坐标系中计算：
 
-- 航向 `ψ = θ + h·yaw_imu + δ_robot`（全局参考 θ + 每机独立修正 δ，IMU 安装方向不同的机器人如机器狗由 δ 吸收；
-  没有 δ 的机器人先测量一次），优先使用 `heading_valid` 为真的 EKF 航向；
-  都没有时先沿车体 +x 行驶 0.25 m 标定。
+- 航向优先取 `heading_valid` 为真的 EKF 航向；否则 `ψ = θ + h·yaw_imu + δ_robot`（全局参考 θ + 每机独立修正 δ，IMU 安装方向不同的机器人如机器狗由 δ 吸收；
+  没有 δ 的机器人先测量一次，只在地磁 LOCKED 时学习）；都没有时先沿车体 +x 行驶 0.25 m 标定。
 - 比例控制 + 限速 0.3 m/s + 限加速度 + 机器人间斥力避让，全向平移（wz = 0），世界速度按航向与手性换算为车体 `cmd_vel`。
 - 行驶 / 手动驾驶时持续比较“车体指令方向”与“UWB 观测运动方向”在线修正 θ、δ；偏差持续 > 100° 自动停车重新标定。
 - `N` 键可切回 ROS 导航（发布 `goal_pose` 给 `uwb_goal_nav.py`）；无人机始终只发布三维 `goal_pose`，不发 `cmd_vel`。
