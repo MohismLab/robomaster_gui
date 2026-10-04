@@ -11,8 +11,8 @@ extends RefCounted
 ## Whenever the robot moves under a known, steady body command (navigation or manual
 ## drive) the motion direction seen by UWB is compared with the command, which
 ## learns / refines the HeadingModel - only while the magnetometer is LOCKED
-## (/<robot>/imu/mag_state): when it is rejected the IMU yaw is gyro-only and drifts
-## (~0.3 deg/s seen on the Go2), so nothing is learned from it then. Without any heading yet, an order first drives
+## (/<robot>/imu/mag_state, received within the last second): otherwise the IMU yaw
+## may be gyro-only and drifts, so nothing is learned from it then. Without any heading yet, an order first drives
 ## calib_dist along body +x.
 ##
 ## Body frame (cmd_vel): x forward, y left. Body +y points to psi + h * 90 deg in the
@@ -43,7 +43,7 @@ var goal = null             # Vector2, UWB frame
 var pos := Vector2.ZERO     # UWB frame
 var psi = null              # float or null, UWB frame
 var yaw_enu = null          # latest IMU yaw (ENU) or null
-var mag_ok := true          # magnetometer LOCKED (or the robot reports no mag_state)
+var mag_ok := false         # magnetometer LOCKED right now (fresh /<robot>/imu/mag_state)
 var heading_source := "-"
 var status := ""
 var psi_motion = null       # heading from a calibration without IMU
@@ -178,8 +178,9 @@ func _velocity() -> Variant:
 func _update_heading(s: Dictionary) -> void:
 	var imu_ok: bool = s.get("has_imu", false) and s.get("imu_age", 1e9) < imu_timeout
 	yaw_enu = s["imu_yaw"] if imu_ok else null
-	var ms: String = s.get("mag_state", "")
-	mag_ok = ms == "" or ms == "LOCKED"
+	# only a fresh LOCKED counts: no mag_state at all, or a stale one, means the IMU yaw may
+	# be gyro-only (seen on rm_1 while its magnetometer reference was not established)
+	mag_ok = s.get("mag_state", "") == "LOCKED" and s.get("mag_age", 1e9) < 1.0
 	if s.get("has_orientation", false):
 		psi = s["uwb_yaw"]
 		heading_source = "EKF"

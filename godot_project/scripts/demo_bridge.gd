@@ -131,7 +131,7 @@ func get_robot_states() -> Dictionary:
 		out[r] = {"has_pose": true, "position": Vector3(d.x, d.y, 0.0), "yaw": 0.0,
 				"age": 0.05, "has_goal": s["goal"] != null, "goal": goal, "status": status,
 				"uwb_position": u, "uwb_yaw": 0.0, "has_orientation": false, "seq": s["seq"], "t": _t,
-				"has_imu": true, "imu_yaw": imu_yaw, "imu_age": 0.05, "mag_state": "LOCKED", "height": height}
+				"has_imu": true, "imu_yaw": imu_yaw, "imu_age": 0.05, "mag_state": "LOCKED", "mag_age": 0.01, "height": height}
 	return out
 
 

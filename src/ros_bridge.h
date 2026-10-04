@@ -166,6 +166,8 @@ private:
         double imu_yaw = 0;
         Clock::time_point imu_stamp;
         std::string mag_state;
+        Clock::time_point mag_stamp;
+        bool has_mag = false;
         std::string calib_status;
         Clock::time_point calib_stamp;
         bool has_goal = false;

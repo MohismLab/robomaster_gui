@@ -175,6 +175,8 @@ void RosBridge::add_robot(const std::string& r)
                 if (it != state_.end())
                 {
                     it->second.mag_state = msg->data;
+                    it->second.mag_stamp = Clock::now();
+                    it->second.has_mag = true;
                 }
             },
             sub_options_));
@@ -746,6 +748,7 @@ Dictionary RosBridge::get_robot_states() const
         d["imu_yaw"] = r.imu_yaw;
         d["imu_age"] = r.has_imu ? seconds_since(r.imu_stamp) : 1e9;
         d["mag_state"] = String::utf8(r.mag_state.c_str());
+        d["mag_age"] = r.has_mag ? seconds_since(r.mag_stamp) : 1e9;
         // the calibration republishes about every second; a stale latched "calibrating"
         // (calibration process killed) expires after 3 s
         d["calib_status"] = String::utf8(r.calib_status.c_str());
