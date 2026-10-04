@@ -1,0 +1,5 @@
+# Godot import cache / build output
+godot_project/.godot/
+godot_project/bin/
+*.import.tmp
+__pycache__/

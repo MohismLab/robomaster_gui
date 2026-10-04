@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""Start the Godot RoboMaster GUI (GDExtension robomaster_gui).
+
+  ros2 run robomaster_gui_node robomaster_gui                  (robots found automatically)
+  ros2 run robomaster_gui_node robomaster_gui --robots rm_0,rm_2
+  GODOT_BIN=/path/to/godot ros2 run robomaster_gui_node robomaster_gui
+
+Everything after the options is handed to the Godot project (see main.gd).
+"""
+
+import os
+import shutil
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+PROJECT = os.path.normpath(os.path.join(HERE, '..', '..', 'share', 'robomaster_gui_node', 'godot_project'))
+
+
+def find_godot():
+    for cand in (os.environ.get('GODOT_BIN'), '@GODOT_BIN@', shutil.which('godot4'), shutil.which('godot')):
+        if cand and os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+    sys.exit('Godot 4.5 not found: set GODOT_BIN')
+
+
+def main():
+    godot = find_godot()
+    project = os.environ.get('ROBOMASTER_GUI_PROJECT', PROJECT)
+    # ros2 run / launch append --ros-args ...; the Godot side does not need them
+    args = sys.argv[1:]
+    if '--ros-args' in args:
+        args = args[:args.index('--ros-args')]
+    # first start (or after a reinstall): import models/shaders once, headless
+    if not os.path.isdir(os.path.join(project, '.godot', 'imported')):
+        print('[robomaster_gui] importing Godot resources (first start)...')
+        subprocess.run([godot, '--headless', '--path', project, '--import'], check=False)
+    # hybrid laptops: render on the NVIDIA GPU (PRIME render offload)
+    env = dict(os.environ)
+    env.setdefault('__NV_PRIME_RENDER_OFFLOAD', '1')
+    env.setdefault('__GLX_VENDOR_LIBRARY_NAME', 'nvidia')
+    env.setdefault('__VK_LAYER_NV_optimus', 'NVIDIA_only')
+    env.setdefault('DRI_PRIME', '1')
+    os.execve(godot, [godot, '--rendering-driver', 'vulkan', '--path', project, '--'] + args, env)
+
+
+if __name__ == '__main__':
+    main()
